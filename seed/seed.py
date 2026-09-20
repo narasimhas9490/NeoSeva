@@ -440,15 +440,19 @@ def main():
     parser.add_argument("--test", action="store_true", help="use TEST_DATABASE_URL")
     parser.add_argument("--target", choices=("local", "supabase"), help="database to use; default is DB_TARGET")
     parser.add_argument("--no-demo", action="store_true", help="catalog and settings only")
+    parser.add_argument("--if-empty", action="store_true", help="seed the catalog only when no geography exists yet; the admin login is always ensured")
     args = parser.parse_args()
     cfg = Config()
     init_engine(cfg, cfg.test_database_url if args.test else url_or_exit(cfg, args.target))
     print(f"database: {engine().url.host}")
     with tx() as conn:
-        seed_geography(conn)
-        seed_catalog(conn)
-        if not args.no_demo:
-            seed_demo(conn)
+        if args.if_empty and scalar(conn, "SELECT count(*) FROM geography"):
+            print("catalog already present, not reseeding")
+        else:
+            seed_geography(conn)
+            seed_catalog(conn)
+            if not args.no_demo:
+                seed_demo(conn)
         if cfg.admin_bootstrap_password:
             create_admin(conn, cfg.admin_bootstrap_username, cfg.admin_bootstrap_password)
     print("seeded" + ("" if args.no_demo else " with demo data"))

@@ -1,0 +1,42 @@
+# Render Blueprint: one web service backed by Supabase (database and image storage).
+# Secrets marked sync: false are typed into the Render dashboard, never stored in git.
+services:
+  - type: web
+    name: neoseva
+    runtime: python
+    plan: free
+    region: singapore # pick the region closest to your Supabase project
+    buildCommand: pip install -r requirements.txt
+    # Migrate, make sure the catalog and admin login exist (first run only), then serve.
+    # One worker: the background jobs run inside the process and must not run twice.
+    startCommand: python scripts/migrate.py && python seed/seed.py --no-demo --if-empty && gunicorn run:app --workers 1 --threads 4 --timeout 60 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_JSON
+        value: "true"
+      - key: DB_TARGET
+        value: supabase
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: SUPABASE_URL
+        value: https://parzhzblkztxvogkxzyh.supabase.co
+      - key: SUPABASE_DATABASE_URL # session pooler string, postgresql+psycopg://...
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_BOOTSTRAP_USERNAME
+        value: admin
+      - key: ADMIN_BOOTSTRAP_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: ADMIN_API_KEY
+        generateValue: true

@@ -833,3 +833,12 @@ These are waiting on handover specs for chunks 5–7. Their tables already exist
 - Cancelling a booked job, no-shows, disputes, rematching, rescheduling (`CANCEL` and `RESCHEDULE` are left out of `availableActions` until these exist).
 - Reviews, saved partners, referrals and complaints endpoints for the apps.
 - Real push delivery (it is logged today) and the real 2Factor.in SMS (it needs an API key).
+
+## Deploying on Render (with Supabase)
+
+`render.yaml` is a Render Blueprint. The web service runs gunicorn with one worker, migrates on every start and seeds the catalog and admin login only when the database is empty. Nothing from `.env` is deployed: `.env` is git-ignored, so its values are entered in Render instead.
+
+1. Create the Supabase tables and data once from your machine: put `SUPABASE_DATABASE_URL` in `.env`, then `python scripts/migrate.py --target supabase` and `python seed/seed.py --target supabase`.
+2. In Render: New > Blueprint, pick this repo. Fill the three prompted secrets: `SUPABASE_DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_BOOTSTRAP_PASSWORD`. The other secrets are generated.
+3. Use the Supabase **session pooler** URL (IPv4). Render cannot reach the direct database host.
+4. Images go to Supabase Storage. Render's disk is wiped on every deploy, so `STORAGE_BACKEND=supabase` is required there.
