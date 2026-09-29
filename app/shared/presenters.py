@@ -1,7 +1,7 @@
 from app.core import clock
 from app.core.db import many, one, scalar
 from app.core.money import money
-from app.shared.settings import text_for
+from app.shared.settings import current_language, text_for
 
 ENDED_TEXT_KEYS = {
     "CANCELLED_BY_CUSTOMER": ("ENDED_CANCELLED_BY_CUSTOMER", "You cancelled this request."),
@@ -109,12 +109,12 @@ def pricing_shape(conn, service_id, pricing_type, exact, rate, unit_code, inspec
     return {"type": "INSPECTION", "inspectionCharge": money(inspection)}
 
 
-def schedule_label(on_date, day_part, all_texts):
-    """Format a schedule as '19 Sep • Morning'.
-    The daypart word is served text so it can be corrected.
+def schedule_label(on_date, day_part, all_texts, language):
+    """Format a schedule as '12 September • Morning'.
+    The full month and the daypart word are both in the reader's own language.
     Both apps print it as it is."""
     part = text_for(all_texts, f"DAYPART_{day_part}", day_part.replace("_", " ").title())
-    return f"{clock.short_date(on_date)} • {part}"
+    return f"{clock.full_date(on_date, language)} • {part}"
 
 
 def ended_label(ended_reason, all_texts):
@@ -160,12 +160,13 @@ def request_shape(conn, row, all_texts, with_draft=False):
     canEdit and canCancel are decided here, never by the app.
     with_draft adds the answers themselves while the request is editable."""
     can_edit = row["state"] == "REQUESTED" and row["active_offer_count"] == 0
+    language = current_language(conn)
     shape = {
         "id": row["id"],
         "state": row["state"],
         "service": {"id": row["service_id"], "name": row["service_name"]},
         "summary": {
-            "scheduleLabel": schedule_label(row["schedule_date"], row["day_part"], all_texts),
+            "scheduleLabel": schedule_label(row["schedule_date"], row["day_part"], all_texts, language),
             "areaLabel": row["place_name"],
             "description": row["description"],
         },

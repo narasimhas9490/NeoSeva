@@ -64,7 +64,7 @@ def C(name, type="text", **kw):
 
 
 RO = {"editable": False, "creatable": False, "deletable": False}
-DAYPARTS = ["MORNING", "AFTERNOON", "EVENING", "ANY_TIME"]
+DAYPARTS = ["MORNING", "AFTERNOON", "ANY_TIME"]
 
 RESOURCES = [
     Resource(
@@ -74,7 +74,7 @@ RESOURCES = [
             C("same_day_cutoff_hour", "int", required=True), C("book_ahead_days", "int", required=True),
             C("minimum_notice_minutes", "int", required=True), C("no_show_prompt_delay_minutes", "int", required=True),
             C("preferred_partner_head_start_minutes", "int", required=True), C("morning_ends_hour", "int", required=True),
-            C("afternoon_ends_hour", "int", required=True), C("evening_ends_hour", "int", required=True),
+            C("afternoon_ends_hour", "int", required=True),
             C("is_active", "bool"), C("boundary", "geojson", list=False, help="GeoJSON Polygon or MultiPolygon for the service area"),
         ],
         "id", help="Everything about how a day works in an area. Changes reach apps through the catalog.",
@@ -128,6 +128,7 @@ RESOURCES = [
             C("unit_code", list=False), C("unit_label", list=False), C("unit_per_label", list=False),
             C("min_value", "numeric", list=False), C("max_value", "numeric", list=False),
             C("step_value", "numeric", list=False), C("default_value", "numeric", list=False),
+            C("presets", "int_array", list=False, help="Amounts she taps straight to, e.g. 1,2,5,10. Each must sit on the step."),
             C("depends_on_question_id", ref="request_question", list=False), C("depends_on_values", "text_array", list=False),
             C("sort_order", "int"),
         ],
@@ -164,9 +165,12 @@ RESOURCES = [
     ),
     Resource("experience_range", "Experience ranges", "Catalog lists", ["code"], [C("code", required=True), C("label", required=True), C("sort_order", "int")], "sort_order"),
     Resource(
-        "display_text", "Display text", "Settings", ["key"],
-        [C("key", required=True), C("label", "longtext", required=True), C("note", "longtext")],
-        "key", help="Served sentences: endings, daypart words, area label format.",
+        "display_text", "Display text", "Settings", ["key", "language"],
+        [
+            C("key", required=True), C("language", required=True, choices=["te", "en"]),
+            C("label", "longtext", required=True), C("note", "longtext"),
+        ],
+        "key, language", help="Served sentences: endings, daypart words, area label format. One row per language.",
     ),
     Resource(
         "catalog_setting", "Catalog settings", "Settings", ["id"],
@@ -190,7 +194,8 @@ RESOURCES = [
         "platform_setting", "Platform settings", "Settings", ["id"],
         [
             C("id", "int", readonly=True), C("matching_batch_size", "int", required=True), C("matching_batch_interval_minutes", "int", required=True),
-            C("otp_daily_limit", "int", required=True), C("pin_max_attempts", "int", required=True), C("pin_lockout_seconds", "int", required=True),
+            C("pin_max_attempts", "int", required=True), C("pin_lockout_seconds", "int", required=True),
+            C("pin_lockout_backoff_seconds", "int_array", required=True, help="Wait before each successive lockout on the same job, in seconds; never a hard stop"),
             C("saved_place_upgrade_max_meters", "int", required=True),
             C("well_rated_min_reviews", "int", help="Empty until the founders decide"), C("well_rated_min_positive_percent", "int"),
         ],
@@ -288,6 +293,15 @@ RESOURCES = [
     ),
     Resource("partner_balance", "Balances", "Money", ["partner_id"], [C("partner_id"), C("available_minor", "int")], "available_minor", **RO),
     Resource(
+        "booking_pin_attempt", "PIN attempts", "Work", ["booking_id"],
+        [
+            C("booking_id", ref="booking"), C("failed_count", "int", help="This lockout cycle only"),
+            C("locked_until", "timestamp"), C("total_wrong_count", "int", help="Every wrong code ever typed on this job"),
+            C("lockout_count", "int", help="How many times this job has been locked out"),
+        ],
+        "total_wrong_count DESC", help="Forty on one job is a different picture from two.", **RO,
+    ),
+    Resource(
         "job_report", "Job reports", "Support", ["id"],
         [C("id"), C("booking_id"), C("reported_by"), C("context"), C("reason_code"), C("note", "longtext"), C("created_at", "timestamp")],
         "created_at DESC", **RO,
@@ -324,7 +338,10 @@ RESOURCES = [
     ),
     Resource(
         "device", "Devices", "System", ["device_id"],
-        [C("device_id"), C("user_id"), C("app"), C("platform"), C("push_token", list=False), C("updated_at", "timestamp")],
+        [
+            C("device_id"), C("user_id"), C("app"), C("platform"), C("push_token", list=False),
+            C("language", choices=["te", "en"]), C("updated_at", "timestamp"),
+        ],
         "updated_at DESC", **RO,
     ),
     Resource(

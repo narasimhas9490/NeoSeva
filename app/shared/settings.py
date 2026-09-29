@@ -1,6 +1,6 @@
-from flask import current_app
+from flask import current_app, g
 
-from app.core.db import many, one
+from app.core.db import many, one, scalar
 from app.core.errors import ApiError
 
 
@@ -24,11 +24,24 @@ def platform_setting(conn):
     return row
 
 
-def texts(conn):
-    """Read every served display sentence into a dict by key.
-    Ending labels, daypart names and format strings live here.
+def current_language(conn):
+    """Resolve the reader's language: the signed-in caller's, or the app default.
+    Cached on g for the request, since it never changes mid-call.
+    A push send is about somebody else's device, so it never uses this; it passes language straight to texts()."""
+    if not hasattr(g, "_resolved_language"):
+        user_id = getattr(g, "user_id", None)
+        found = scalar(conn, "SELECT language FROM app_user WHERE id = :u", u=user_id) if user_id else None
+        g._resolved_language = found or current_app.config["NS"].default_language
+    return g._resolved_language
+
+
+def texts(conn, language=None):
+    """Read every served display sentence into a dict by key, in one language.
+    Defaults to the signed-in caller's language; pass language to render for
+    somebody else, such as the recipient of a push.
     Admin edits them without an app release."""
-    return {r["key"]: r["label"] for r in many(conn, "SELECT key, label FROM display_text")}
+    language = language or current_language(conn)
+    return {r["key"]: r["label"] for r in many(conn, "SELECT key, label FROM display_text WHERE language = :l", l=language)}
 
 
 def text_for(all_texts, key, default="", **values):

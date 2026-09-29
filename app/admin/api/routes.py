@@ -238,6 +238,9 @@ def set_partner_status(partner_id):
             n=note.strip() if isinstance(note, str) and note.strip() else None,
             p=partner_id,
         )
+        if status == "SUSPENDED":
+            run(conn, "UPDATE auth_session SET revoked_at = now() WHERE user_id = :p AND revoked_at IS NULL", p=partner_id)
+            run(conn, "UPDATE device SET push_token = NULL WHERE user_id = :p", p=partner_id)
     return ok({"partnerId": partner_id, "status": status})
 
 

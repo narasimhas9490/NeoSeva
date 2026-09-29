@@ -1,8 +1,19 @@
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-DAYPARTS = ("MORNING", "AFTERNOON", "EVENING")
+DAYPARTS = ("MORNING", "AFTERNOON")
 REQUEST_DAYPARTS = DAYPARTS + ("ANY_TIME",)
+
+MONTH_NAMES = {
+    "en": [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ],
+    "te": [
+        "జనవరి", "ఫిబ్రవరి", "మార్చి", "ఏప్రిల్", "మే", "జూన్",
+        "జూలై", "ఆగస్టు", "సెప్టెంబర్", "అక్టోబర్", "నవంబర్", "డిసెంబర్",
+    ],
+}
 
 _offset = timedelta(0)
 
@@ -56,13 +67,12 @@ def iso_utc(moment):
 
 def daypart_end(geo, on_date, day_part):
     """Return the aware local moment a daypart ends on a date.
-    Hours come from the geography's morning/afternoon/evening columns.
-    ANY_TIME ends when the evening ends."""
+    Hours come from the geography's morning/afternoon columns.
+    ANY_TIME ends when the afternoon ends; there is no evening."""
     hours = {
         "MORNING": geo["morning_ends_hour"],
         "AFTERNOON": geo["afternoon_ends_hour"],
-        "EVENING": geo["evening_ends_hour"],
-        "ANY_TIME": geo["evening_ends_hour"],
+        "ANY_TIME": geo["afternoon_ends_hour"],
     }
     return datetime(on_date.year, on_date.month, on_date.day, hours[day_part], tzinfo=ZoneInfo(geo["timezone"]))
 
@@ -117,3 +127,11 @@ def short_date(on_date):
     Built by hand because %-d is not portable to Windows.
     The month is the English three-letter abbreviation."""
     return f"{on_date.day} {on_date.strftime('%b')}"
+
+
+def full_date(on_date, language):
+    """Format a date as '19 September' in the reader's language.
+    Built by hand, like short_date, so it is portable to Windows.
+    Falls back to English month names for a language not in MONTH_NAMES."""
+    months = MONTH_NAMES.get(language, MONTH_NAMES["en"])
+    return f"{on_date.day} {months[on_date.month - 1]}"

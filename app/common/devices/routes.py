@@ -14,7 +14,8 @@ bp = Blueprint("devices", __name__)
 def put_push_token(device_id):
     """Register the push token for one app installation.
     A token already held by another device is taken from it: one device, one token.
-    Also records the language the phone is using; returns 204."""
+    Also records the language this installation reads in, on the device itself,
+    since one person may read the two apps in different languages; returns 204."""
     data = body()
     token, app = data.get("token"), data.get("app") or g.app
     if not isinstance(token, str) or not token.strip():
@@ -23,20 +24,21 @@ def put_push_token(device_id):
         raise bad_request("INVALID_APP", "app must be CUSTOMER or PARTNER.")
     if data.get("platform", "ANDROID") != "ANDROID":
         raise bad_request("INVALID_PLATFORM", "platform must be ANDROID.")
+    device_language = language(data["language"], current_app.config["NS"]) if data.get("language") else None
     with tx() as conn:
         run(conn, "DELETE FROM device WHERE push_token = :t AND device_id <> :d", t=token, d=device_id)
         run(
             conn,
-            """INSERT INTO device (device_id, user_id, app, platform, push_token, updated_at)
-               VALUES (:d, :u, :a, 'ANDROID', :t, now())
-               ON CONFLICT (device_id) DO UPDATE SET user_id = :u, app = :a, push_token = :t, updated_at = now()""",
+            """INSERT INTO device (device_id, user_id, app, platform, push_token, language, updated_at)
+               VALUES (:d, :u, :a, 'ANDROID', :t, :l, now())
+               ON CONFLICT (device_id) DO UPDATE SET user_id = :u, app = :a, push_token = :t,
+                   language = COALESCE(:l, device.language), updated_at = now()""",
             d=device_id,
             u=g.user_id,
             a=app,
             t=token,
+            l=device_language,
         )
-        if data.get("language"):
-            run(conn, "UPDATE app_user SET language = :l WHERE id = :u", l=language(data["language"], current_app.config["NS"]), u=g.user_id)
     return no_content()
 
 

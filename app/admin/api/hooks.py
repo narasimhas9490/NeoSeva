@@ -17,6 +17,10 @@ def validate_question(conn, values, key):
         low, high, step, default = (Decimal(str(merged[f])) for f in ("min_value", "max_value", "step_value", "default_value"))
         if not (low <= default <= high) or step <= 0 or low > high:
             raise unprocessable("QUESTION_INCOMPLETE", "Bounds must satisfy min <= default <= max and step > 0.")
+        for p in merged.get("presets") or []:
+            value = Decimal(str(p))
+            if value < low or value > high or (value - low) % step != 0:
+                raise unprocessable("QUESTION_INCOMPLETE", f"Preset {p} must sit within bounds and on the question's step.")
     parent_id = merged.get("depends_on_question_id")
     if parent_id:
         parent = one(conn, "SELECT service_id, sort_order FROM request_question WHERE id = :id", id=parent_id)

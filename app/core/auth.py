@@ -168,6 +168,11 @@ def _authenticate(expected_app):
         raise ApiError(401, "TOKEN_EXPIRED", "The access token has expired.")
     if expected_app and claims.get("app") != expected_app:
         raise ApiError(403, "WRONG_APP", f"This endpoint belongs to the {expected_app.lower()} app.")
+    if claims.get("sid"):
+        with tx() as conn:
+            revoked = one(conn, "SELECT 1 FROM auth_session WHERE id = :id AND revoked_at IS NOT NULL", id=claims["sid"])
+        if revoked:
+            raise ApiError(401, "SESSION_REVOKED", "Sign in again.")
     g.user_id, g.app = claims["sub"], claims.get("app")
 
 

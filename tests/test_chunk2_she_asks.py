@@ -61,12 +61,12 @@ def test_show_if_rules(client):
 
 
 def test_schedule_rules(client):
-    """Past dates, the evening cutoff, the horizon and short notice each have a code.
+    """Past dates, the same-day cutoff, the horizon and short notice each have a code.
     ANY_TIME passes while any daypart of the day still has notice.
-    All are checked in the area's own clock."""
-    today = at_local(18, 5)
+    All are checked in the area's own clock. There is no evening."""
+    today = at_local(16, 5)
     customer = sign_in(client, "+919100000003")
-    assert post(customer, tractor_request(today, "EVENING"))[1]["error"]["code"] == "SAME_DAY_CLOSED"
+    assert post(customer, tractor_request(today, "AFTERNOON"))[1]["error"]["code"] == "SAME_DAY_CLOSED"
     assert post(customer, tractor_request(today - timedelta(days=1)))[1]["error"]["code"] == "DATE_IN_PAST"
     assert post(customer, tractor_request(today + timedelta(days=20)))[1]["error"]["code"] == "BEYOND_BOOKING_HORIZON"
     today = at_local(11, 40)

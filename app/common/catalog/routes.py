@@ -7,6 +7,7 @@ from app.common.catalog import service
 from app.core.db import tx
 from app.core.envelope import ok, use_timezone
 from app.core.errors import not_found
+from app.shared.templates import parse_app_version
 
 bp = Blueprint("catalog", __name__)
 
@@ -17,8 +18,9 @@ def get_catalog():
     If-None-Match with the current ETag gets a 304 and no body.
     The clock in meta is never cached with the body."""
     cfg = current_app.config["NS"]
+    app_version = parse_app_version(request.headers.get("X-App-Version"))
     with tx() as conn:
-        data, tz_name = service.build_catalog(conn, request.args.get("areaId"))
+        data, tz_name = service.build_catalog(conn, request.args.get("areaId"), app_version)
     use_timezone(tz_name)
     etag = '"' + hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:16] + '"'
     if cfg.catalog_etag_enabled and etag in (request.headers.get("If-None-Match") or ""):

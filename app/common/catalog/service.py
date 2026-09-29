@@ -1,6 +1,6 @@
 from app.core.db import many, one
 from app.shared.settings import catalog_setting, default_geography, geography
-from app.shared.templates import load_questions, question_shape, servable
+from app.shared.templates import load_questions, min_supported_type_version, question_shape, servable
 
 REASON_CONTEXTS = (
     "CUSTOMER_CANCEL_REQUEST",
@@ -22,9 +22,11 @@ def resolve_area(conn, area_id):
     return (geo, True) if geo and geo["is_active"] else (None, False)
 
 
-def services(conn, geo):
+def services(conn, geo, app_version=None):
     """List the services running in a geography, each with its equipment.
     Only services joined through service_geography are sent.
+    A service whose servable questions need a newer app than app_version is
+    left out, since the app could not draw its request form.
     An unknown area gets an empty list."""
     if geo is None:
         return []
@@ -34,6 +36,11 @@ def services(conn, geo):
            WHERE sg.geography_id = :g AND s.is_active ORDER BY s.sort_order, s.name""",
         g=geo["id"],
     )
+    if app_version is not None:
+        rows = [
+            r for r in rows
+            if min_supported_type_version([q for q in load_questions(conn, r["id"])[1] if servable(q)]) <= app_version
+        ]
     equipment = many(
         conn,
         "SELECT * FROM service_equipment WHERE service_id = ANY(:ids) ORDER BY sort_order, id",
@@ -96,8 +103,8 @@ def reasons(conn):
 
 def scheduling(geo):
     """Put a geography's day into the flat scheduling block.
-    The three daypart hours sit directly under scheduling, not nested.
-    These numbers are the promise made to a customer."""
+    The two daypart hours sit directly under scheduling, not nested.
+    These numbers are the promise made to a customer. No evening."""
     return {
         "sameDayCutoffHour": geo["same_day_cutoff_hour"],
         "bookAheadDays": geo["book_ahead_days"],
@@ -106,17 +113,16 @@ def scheduling(geo):
         "preferredPartnerHeadStartMinutes": geo["preferred_partner_head_start_minutes"],
         "morningEndsHour": geo["morning_ends_hour"],
         "afternoonEndsHour": geo["afternoon_ends_hour"],
-        "eveningEndsHour": geo["evening_ends_hour"],
     }
 
 
-def build_catalog(conn, area_id):
+def build_catalog(conn, area_id, app_version=None):
     """Assemble everything both apps display, in one body.
     Eighteen keys, always all present; unknown areas get empty service lists.
     Returns (data, timezone) so meta reports the area's own clock."""
     catalog = catalog_setting(conn)
     geo, _ = resolve_area(conn, area_id)
-    service_list = services(conn, geo)
+    service_list = services(conn, geo, app_version)
     fallback = geo or default_geography(conn)
     data = {
         "services": service_list,

@@ -14,7 +14,6 @@ from app.core.auth import access_token, ensure_profile, find_session, hash_secre
 from app.core.db import many, one, run, scalar, tx
 from app.core.errors import ApiError, bad_request, unprocessable
 from app.core.ids import new_id
-from app.shared.settings import platform_setting
 
 log = logging.getLogger("neoseva.auth")
 PHONE_RE = re.compile(r"^\+[1-9]\d{7,14}$")
@@ -44,8 +43,10 @@ def _new_code(cfg):
 
 
 def request_otp(data):
-    """Send a login code, enforcing the resend backoff and daily cap.
-    Too soon and too many are 429s with their own codes; a vendor failure is 502.
+    """Send a login code, enforcing only the resend backoff.
+    No daily cap: a wall there would let anybody lock somebody out of their
+    own number, and the growing backoff (30, 60, 120, 300s) is protection
+    enough. Too soon is a 429; a vendor failure is 502.
     Returns the challenge id and the two countdowns."""
     cfg = current_app.config["NS"]
     phone, purpose = data.get("phoneNumber"), data.get("purpose", "LOGIN")
@@ -57,15 +58,6 @@ def request_otp(data):
     now = clock.now_utc()
     backoff = cfg.otp_resend_backoff_seconds or [30]
     with tx() as conn:
-        daily_limit = platform_setting(conn)["otp_daily_limit"]
-        today = scalar(
-            conn,
-            "SELECT count(*) FROM otp_request WHERE phone_e164 = :p AND created_at > :since",
-            p=phone,
-            since=now - timedelta(hours=24),
-        )
-        if today >= daily_limit:
-            raise ApiError(429, "OTP_DAILY_LIMIT", "Too many codes today.", {"dailyLimit": daily_limit})
         recent = many(
             conn,
             """SELECT created_at FROM otp_request WHERE phone_e164 = :p AND consumed_at IS NULL

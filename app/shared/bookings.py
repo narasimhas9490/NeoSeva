@@ -132,6 +132,12 @@ def customer_booking_shape(conn, row):
     platform = platform_setting(conn)
     geo = geography(conn, row["geography_id"])
     name = row["booked_partner_display_name"] or row["partner_name"]
+    photo_url = scalar(
+        conn,
+        """SELECT m.url FROM partner_profile pp LEFT JOIN media m ON m.id = pp.profile_photo_media_id AND m.deleted_at IS NULL
+           WHERE pp.user_id = :p""",
+        p=row["partner_id"],
+    )
     review = one(conn, "SELECT verdict, tag_codes, comment, created_at FROM review WHERE booking_id = :b", b=row["id"])
     return {
         "id": row["id"],
@@ -141,6 +147,7 @@ def customer_booking_shape(conn, row):
             "id": row["partner_id"],
             "displayName": name,
             "phoneNumber": row["partner_phone"],
+            "profilePhoto": photo_url,
             "trust": P.partner_trust(conn, row["partner_id"], platform),
         },
         "service": {"id": row["service_id"], "name": row["service_name"]},
@@ -425,9 +432,12 @@ def improve_saved_place(conn, row):
 
 
 def check_pin(booking_id, partner_id, pin):
-    """Check the four digits he typed, with a lockout against guessing.
+    """Check the four digits he typed, with a growing wait against guessing.
     Wrong attempts are written in their own transaction so they always count.
+    total_wrong_count and lockout_count never reset; only the current cycle's
+    failed_count does, at each lockout and on a correct code.
     Raises WRONG_PIN or PIN_TOO_MANY_ATTEMPTS; returns quietly when right."""
+    locked_until, wait_seconds = None, None
     with tx() as conn:
         row = load_booking(conn, booking_id, partner_id=partner_id, lock=True)
         if row is None:
@@ -439,22 +449,29 @@ def check_pin(booking_id, partner_id, pin):
             wait = int((attempt["locked_until"] - now).total_seconds()) + 1
             raise ApiError(429, "PIN_TOO_MANY_ATTEMPTS", "Too many wrong codes.", {"retryAfterSeconds": wait})
         if isinstance(pin, str) and hmac.compare_digest(pin.encode(), row["completion_pin"].encode()):
-            run(conn, "DELETE FROM booking_pin_attempt WHERE booking_id = :b", b=booking_id)
+            if attempt:
+                run(conn, "UPDATE booking_pin_attempt SET failed_count = 0, locked_until = NULL WHERE booking_id = :b", b=booking_id)
             return
         failed = (attempt["failed_count"] if attempt else 0) + 1
-        locked_until = None
+        total = (attempt["total_wrong_count"] if attempt else 0) + 1
+        lockout_count = attempt["lockout_count"] if attempt else 0
         if failed >= settings["pin_max_attempts"]:
-            locked_until, failed = now + timedelta(seconds=settings["pin_lockout_seconds"]), 0
+            backoff = settings["pin_lockout_backoff_seconds"] or [300]
+            lockout_count += 1
+            wait_seconds = backoff[min(lockout_count - 1, len(backoff) - 1)]
+            locked_until, failed = now + timedelta(seconds=wait_seconds), 0
         run(
             conn,
-            """INSERT INTO booking_pin_attempt (booking_id, failed_count, locked_until) VALUES (:b, :f, :l)
-               ON CONFLICT (booking_id) DO UPDATE SET failed_count = :f, locked_until = :l""",
+            """INSERT INTO booking_pin_attempt (booking_id, failed_count, locked_until, total_wrong_count, lockout_count)
+               VALUES (:b, :f, :l, :t, :lc)
+               ON CONFLICT (booking_id) DO UPDATE
+                   SET failed_count = :f, locked_until = :l, total_wrong_count = :t, lockout_count = :lc""",
             b=booking_id,
             f=failed,
             l=locked_until,
+            t=total,
+            lc=lockout_count,
         )
     if locked_until:
-        raise ApiError(
-            429, "PIN_TOO_MANY_ATTEMPTS", "Too many wrong codes.", {"retryAfterSeconds": settings["pin_lockout_seconds"]}
-        )
+        raise ApiError(429, "PIN_TOO_MANY_ATTEMPTS", "Too many wrong codes.", {"retryAfterSeconds": wait_seconds})
     raise unprocessable("WRONG_PIN", "That code is not right.")

@@ -161,7 +161,7 @@ def test_lowest_price_claim(app, client):
 
 
 def test_accepting_suspension_decline_withdraw(app, client):
-    """Turning acceptingNewJobs off stops new work; a suspended partner cannot turn it on.
+    """Turning acceptingNewJobs off stops new work; suspension ends his session at once.
     Declining hides the job and changes nothing else.
     Withdrawing marks the offer WITHDRAWN."""
     today = at_local(7)
@@ -179,7 +179,7 @@ def test_accepting_suspension_decline_withdraw(app, client):
     assert ravi.get("/partner/opportunities")[1]["data"] == []
     admin = {"X-Admin-Key": app.config["NS"].admin_api_key}
     client.post(f"/admin/api/partners/{ravi.user_id}/status", json={"status": "SUSPENDED", "statusNote": "Paused"}, headers=admin)
-    assert ravi.call("PATCH", "/partner/me", {"acceptingNewJobs": True})[1]["error"]["code"] == "PARTNER_SUSPENDED"
+    assert ravi.call("PATCH", "/partner/me", {"acceptingNewJobs": True})[0] == 401
 
 
 def test_batches_and_preferred_partner_head_start(app, client):

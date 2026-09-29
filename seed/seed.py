@@ -116,25 +116,26 @@ CATALOG = {
 PLATFORM = {
     "matching_batch_size": 5,
     "matching_batch_interval_minutes": 10,
-    "otp_daily_limit": 10,
     "pin_max_attempts": 5,
     "pin_lockout_seconds": 300,
+    "pin_lockout_backoff_seconds": [60, 120, 300, 600],
     "saved_place_upgrade_max_meters": 300,
     "well_rated_min_reviews": None,
     "well_rated_min_positive_percent": None,
 }
 
+# (key, English, Telugu, note). One display_text row is seeded per language;
+# the founder refines the Telugu wording in the console.
 DISPLAY_TEXT = [
-    ("ENDED_CANCELLED_BY_CUSTOMER", "You cancelled this request.", "endedLabel for CANCELLED_BY_CUSTOMER"),
-    ("ENDED_NO_PARTNER_AVAILABLE", "No partner was free for this day. Try another day.", "endedLabel for NO_PARTNER_AVAILABLE"),
-    ("ENDED_NOT_BOOKED", "This day passed without a booking.", "endedLabel for NOT_BOOKED"),
-    ("ENDED_PARTNER_FELL_THROUGH", "Your partner could not come. We are sorry.", "endedLabel for PARTNER_FELL_THROUGH"),
-    ("NOT_SURE", "Not sure", "displayValue when she answered not sure"),
-    ("DAYPART_MORNING", "Morning", "Used in scheduleLabel"),
-    ("DAYPART_AFTERNOON", "Afternoon", "Used in scheduleLabel"),
-    ("DAYPART_EVENING", "Evening", "Used in scheduleLabel"),
-    ("DAYPART_ANY_TIME", "Any time", "Used in scheduleLabel"),
-    ("AREA_LABEL_FORMAT", "{placeName} area", "approximateArea.areaLabel; {placeName} is the village"),
+    ("ENDED_CANCELLED_BY_CUSTOMER", "You cancelled this request.", "మీరు ఈ అభ్యర్థనను రద్దు చేశారు.", "endedLabel for CANCELLED_BY_CUSTOMER"),
+    ("ENDED_NO_PARTNER_AVAILABLE", "No partner was free for this day. Try another day.", "ఈ రోజుకు భాగస్వామి అందుబాటులో లేరు. మరో రోజు ప్రయత్నించండి.", "endedLabel for NO_PARTNER_AVAILABLE"),
+    ("ENDED_NOT_BOOKED", "This day passed without a booking.", "బుకింగ్ లేకుండా ఈ రోజు ముగిసింది.", "endedLabel for NOT_BOOKED"),
+    ("ENDED_PARTNER_FELL_THROUGH", "Your partner could not come. We are sorry.", "మీ భాగస్వామి రాలేకపోయారు. క్షమించండి.", "endedLabel for PARTNER_FELL_THROUGH"),
+    ("NOT_SURE", "Not sure", "ఖచ్చితంగా తెలియదు", "displayValue when she answered not sure"),
+    ("DAYPART_MORNING", "Morning", "ఉదయం", "Used in scheduleLabel"),
+    ("DAYPART_AFTERNOON", "Afternoon", "మధ్యాహ్నం", "Used in scheduleLabel"),
+    ("DAYPART_ANY_TIME", "Any time", "ఎప్పుడైనా", "Used in scheduleLabel"),
+    ("AREA_LABEL_FORMAT", "{placeName} area", "{placeName} ప్రాంతం", "approximateArea.areaLabel; {placeName} is the village"),
 ]
 
 
@@ -158,9 +159,9 @@ def seed_geography(conn):
     Village boundaries are Voronoi cells clipped to 2 km, so a few gaps have no village.
     The area boundary is the hull around every village, buffered."""
     upsert(conn, "geography", ["id"], {
-        "id": GEO, "label": "Podalakur Mandal", "timezone": "Asia/Kolkata", "same_day_cutoff_hour": 18, "book_ahead_days": 14,
+        "id": GEO, "label": "Podalakur Mandal", "timezone": "Asia/Kolkata", "same_day_cutoff_hour": 16, "book_ahead_days": 14,
         "minimum_notice_minutes": 60, "no_show_prompt_delay_minutes": 30, "preferred_partner_head_start_minutes": 30,
-        "morning_ends_hour": 12, "afternoon_ends_hour": 17, "evening_ends_hour": 21, "is_active": True,
+        "morning_ends_hour": 12, "afternoon_ends_hour": 17, "is_active": True,
     })
     for place_id, name, lat, lng in PLACES:
         run(
@@ -233,8 +234,9 @@ def seed_catalog(conn):
         upsert(conn, "experience_range", ["code"], {"code": code, "label": label, "sort_order": sort})
     upsert(conn, "catalog_setting", ["id"], {"id": 1, **CATALOG})
     upsert(conn, "platform_setting", ["id"], {"id": 1, **PLATFORM})
-    for key, label, note in DISPLAY_TEXT:
-        upsert(conn, "display_text", ["key"], {"key": key, "label": label, "note": note})
+    for key, label_en, label_te, note in DISPLAY_TEXT:
+        upsert(conn, "display_text", ["key", "language"], {"key": key, "language": "en", "label": label_en, "note": note})
+        upsert(conn, "display_text", ["key", "language"], {"key": key, "language": "te", "label": label_te, "note": note})
 
 
 def user(conn, uid, phone, language="te"):
@@ -417,7 +419,7 @@ def seed_demo(conn):
            ON CONFLICT DO NOTHING""",
     )
 
-    request_row(conn, "rqt_seed_cancelled", "usr_seed_lakshmi", "svc_electrician", None, "CANCELLED", tomorrow, "EVENING",
+    request_row(conn, "rqt_seed_cancelled", "usr_seed_lakshmi", "svc_electrician", None, "CANCELLED", tomorrow, "AFTERNOON",
                 "plc_podalakur", now - timedelta(days=1), [("q_elec_problem", ["elec_no_power"], None, False)], ended="CANCELLED_BY_CUSTOMER")
     run(conn, "UPDATE request SET cancel_reason_code = 'PLANS_CHANGED' WHERE id = 'rqt_seed_cancelled'")
 

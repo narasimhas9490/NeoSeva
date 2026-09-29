@@ -6,6 +6,35 @@ from app.shared.settings import text_for
 
 CHOICE_TYPES = ("SINGLE_CHOICE", "MULTI_CHOICE")
 
+# The app version that first knows how to draw each question type.
+# Low today: three types and no more. Needed the day a fourth exists.
+QUESTION_TYPE_MIN_APP_VERSION = {
+    "SINGLE_CHOICE": (1, 0, 0),
+    "MULTI_CHOICE": (1, 0, 0),
+    "NUMBER_WITH_UNIT": (1, 0, 0),
+}
+
+
+def parse_app_version(value):
+    """Parse an X-App-Version header into a (major, minor, patch) tuple.
+    Missing or unparsable is None, read as unbounded: a caller that sends no
+    version is never hidden anything on account of its version."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parts = value.strip().split(".")
+    try:
+        return tuple(int(parts[i]) if i < len(parts) else 0 for i in range(3))
+    except ValueError:
+        return None
+
+
+def min_supported_type_version(questions):
+    """Return the highest minimum-app-version any of these questions needs.
+    (1, 0, 0) when every question is one of the original three types.
+    Used to decide whether a service's catalog entry can reach an older app."""
+    versions = [QUESTION_TYPE_MIN_APP_VERSION.get(q["type"], (1, 0, 0)) for q in questions]
+    return max(versions) if versions else (1, 0, 0)
+
 
 def current_version(conn):
     """Return the template version currently served for every service.
@@ -64,6 +93,7 @@ def question_shape(question):
         "id": question["id"],
         "type": question["type"],
         "label": question["label"],
+        "shortLabel": question["short_label"],
         "required": question["required"],
         "allowNotSure": question["allow_not_sure"],
     }
@@ -82,6 +112,7 @@ def question_shape(question):
         shape["max"] = _num(question["max_value"])
         shape["step"] = _num(question["step_value"])
         shape["default"] = _num(question["default_value"])
+        shape["presets"] = [_num(p) for p in question["presets"]] if question["presets"] else []
     if question["depends_on_question_id"]:
         shape["showIf"] = {
             "questionId": question["depends_on_question_id"],

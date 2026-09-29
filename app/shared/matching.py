@@ -112,11 +112,20 @@ def advance(request_id):
                 told = _record(conn, request_id, eligible_partners(conn, request, settings["matching_batch_size"]), 1)
         elif last["batch"] == 0:
             head_start = timedelta(minutes=geo["preferred_partner_head_start_minutes"])
-            if now - request["created_at"] < head_start:
+            preferred_declined = scalar(
+                conn,
+                "SELECT 1 FROM opportunity_notification WHERE request_id = :r AND batch = 0 AND declined_at IS NOT NULL",
+                r=request_id,
+            )
+            if now - request["created_at"] < head_start and not preferred_declined:
                 return []
             told = _record(conn, request_id, eligible_partners(conn, request, settings["matching_batch_size"]), 1)
         else:
-            if now - last["at"] < timedelta(minutes=settings["matching_batch_interval_minutes"]):
+            all_declined = not scalar(
+                conn, "SELECT 1 FROM opportunity_notification WHERE request_id = :r AND declined_at IS NULL", r=request_id
+            )
+            elapsed = now - last["at"] >= timedelta(minutes=settings["matching_batch_interval_minutes"])
+            if not elapsed and not all_declined:
                 return []
             offers = scalar(conn, "SELECT count(*) FROM offer WHERE request_id = :r AND status = 'ACTIVE'", r=request_id)
             if offers:
