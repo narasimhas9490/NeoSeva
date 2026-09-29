@@ -40,3 +40,15 @@ services:
         generateValue: true
       - key: ADMIN_API_KEY
         generateValue: true
+      - key: SMS_ENABLED
+        value: "true"
+      - key: SMS_PROVIDER
+        value: twofactor
+      - key: TWOFACTOR_SENDER_ID
+        value: NEOSEV
+      - key: TWOFACTOR_TEMPLATE_LOGIN_EN # approved template "NeoSevaTry": "Your otp is #VAR1#"
+        value: NeoSevaTry
+      - key: TWOFACTOR_TEMPLATE_LOGIN_TE # reuses the English template until a Telugu one is approved
+        value: NeoSevaTry
+      - key: TWOFACTOR_API_KEY
+        sync: false
